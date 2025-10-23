@@ -1,0 +1,130 @@
+version: '3.8'
+services:
+
+  rabbitmq:
+    image: rabbitmq:3.8-management-alpine
+    container_name: 'rabbitmq'
+    ports:
+        - 5672:5672
+        - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: Admin 
+      RABBITMQ_DEFAULT_PASS: Abc12345
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+      - rabbitmq_log:/var/log/rabbitmq
+        #- ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+        #- ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    healthcheck: 
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_listening"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+    networks:
+        - ecommerce
+
+  mongodb_auth:
+    image: mongo:latest
+    container_name: mongodb_auth_db
+    restart: always
+    volumes:
+      - mongo_auth_data:/data/db
+    ports:
+      - "27017:27017" 
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: sa
+      MONGO_INITDB_ROOT_PASSWORD: Abc12345
+    networks:
+      - ecommerce
+  
+  mongodb_product:
+    image: mongo:latest
+    container_name: mongodb_product_db
+    restart: always
+    volumes:
+      - mongo_product_data:/data/db
+    ports:
+      - "27018:27017" 
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: sa
+      MONGO_INITDB_ROOT_PASSWORD: Abc12345
+    networks:
+      - ecommerce
+
+  mongodb_order:
+    image: mongo:latest
+    container_name: mongodb_order_db
+    restart: always
+    volumes:
+      - mongo_order_data:/data/db
+    ports:
+      - "27019:27017" 
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: sa
+      MONGO_INITDB_ROOT_PASSWORD: Abc12345
+    networks:
+      - ecommerce
+
+  auth:
+    build: ./auth
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongodb_auth:
+        condition: service_started
+    env_file:
+      - ./auth/.env
+    networks:
+      - ecommerce
+
+  order:
+    build: ./order
+    ports:
+      - "3002:3002"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb_order:
+        condition: service_started
+    environment:
+      RABBITMQ_URI: amqp://Admin:Abc12345@rabbitmq:5672/%2F
+    env_file:
+      - ./order/.env
+    networks:
+      - ecommerce
+
+  product:
+    build: ./product
+    ports:
+      - "3001:3001"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb_product:
+        condition: service_started
+    environment:
+      RABBITMQ_URI: amqp://Admin:Abc12345@rabbitmq:5672/%2F
+    env_file:
+      - ./product/.env
+    networks:
+      - ecommerce
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "3003:3003"
+    environment:
+      RABBITMQ_URI: amqp://Admin:Abc12345@rabbitmq:5672
+    networks:
+      - ecommerce
+
+volumes:
+  mongo_auth_data:
+  mongo_product_data:
+  mongo_order_data:
+  rabbitmq_data:
+  rabbitmq_log:
+
+networks:
+  ecommerce:
+   driver: bridge
