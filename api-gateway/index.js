@@ -5,18 +5,39 @@ const proxy = httpProxy.createProxyServer();
 const app = express();
 
 // Route requests to the auth service
-app.use("/auth", (req, res) => {
+app.get("/", (_req, res) => {
+  res.send("API Gateway OK");
+});
+
+app.use("/api/auth", (req, res) => {
+   req.url = req.originalUrl.replace(/^\/api\/auth/, "/");
   proxy.web(req, res, { target: "http://auth:3000" });
 });
 
-// Route requests to the product service
-app.use("/products", (req, res) => {
+// --- PRODUCT SERVICE ---
+app.use("/api/products", (req, res) => {
+   req.url = req.originalUrl.replace(/^\/api\/products/, "/api/products");
   proxy.web(req, res, { target: "http://product:3001" });
 });
 
-// Route requests to the order service
-app.use("/orders", (req, res) => {
+// --- ORDER SERVICE ---
+app.use("/api/orders", (req, res) => {
+  // Redirige la URL tal cual (ya que order usa /api/orders)
   proxy.web(req, res, { target: "http://order:3002" });
+});
+
+proxy.on("error", (err, req, res) => {
+  console.error(`Error proxying ${req.url}:`, err.message);
+  if (!res.headersSent) {
+    res.writeHead(502, { "Content-Type": "application/json" });
+  }
+  res.end(
+    JSON.stringify({
+      success: false,
+      error: "Service unavailable",
+      message: err.message,
+    })
+  );
 });
 
 // Start the server

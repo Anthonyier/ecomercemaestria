@@ -16,10 +16,10 @@ class ProductController {
 
   async createProduct(req, res, next) {
     try {
-      const token = req.headers.authorization;
-      if (!token) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
+      //const token = req.headers.authorization;
+      //if (!token) {
+        //return res.status(401).json({ message: "Unauthorized" });
+      //}
       const product = new Product(req.body);
 
       const validationError = product.validateSync();
@@ -38,10 +38,10 @@ class ProductController {
 
   async createOrder(req, res, next) {
     try {
-      const token = req.headers.authorization;
-      if (!token) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
+      //const token = req.headers.authorization;
+      //if (!token) {
+        //return res.status(401).json({ message: "Unauthorized" });
+      //}
   
       const { ids } = req.body;
       const products = await Product.find({ _id: { $in: ids } });
@@ -97,10 +97,10 @@ class ProductController {
 
   async getProducts(req, res, next) {
     try {
-      const token = req.headers.authorization;
-      if (!token) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
+      //const token = req.headers.authorization;
+      //if (!token) {
+        //return res.status(401).json({ message: "Unauthorized" });
+      //}
       const products = await Product.find({});
 
       res.status(200).json(products);

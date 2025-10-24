@@ -2,26 +2,29 @@ version: '3.8'
 services:
 
   rabbitmq:
-    image: rabbitmq:3.8-management-alpine
-    container_name: 'rabbitmq'
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
     ports:
-        - 5672:5672
-        - 15672:15672
+      - "5672:5672"
+      - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: Admin 
+      RABBITMQ_DEFAULT_USER: Admin
       RABBITMQ_DEFAULT_PASS: Abc12345
+      # Opcional si vas a persistir/clusterizar:
+      # RABBITMQ_ERLANG_COOKIE: "MY_SECRET_COOKIE_123"
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq/
+      - rabbitmq_data:/var/lib/rabbitmq
       - rabbitmq_log:/var/log/rabbitmq
-        #- ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
-        #- ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
-    healthcheck: 
-      test: ["CMD", "rabbitmq-diagnostics", "check_port_listening"]
-      interval: 5s
-      timeout: 15s
-      retries: 5
+    healthcheck:
+      # Opción simple y robusta
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      # Alternativa por puerto:
+      # test: ["CMD", "rabbitmq-diagnostics", "check_port_listener", "5672"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     networks:
-        - ecommerce
+      - ecommerce
 
   mongodb_auth:
     image: mongo:latest
@@ -30,13 +33,13 @@ services:
     volumes:
       - mongo_auth_data:/data/db
     ports:
-      - "27017:27017" 
+      - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: sa
       MONGO_INITDB_ROOT_PASSWORD: Abc12345
     networks:
       - ecommerce
-  
+
   mongodb_product:
     image: mongo:latest
     container_name: mongodb_product_db
@@ -44,7 +47,7 @@ services:
     volumes:
       - mongo_product_data:/data/db
     ports:
-      - "27018:27017" 
+      - "27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: sa
       MONGO_INITDB_ROOT_PASSWORD: Abc12345
@@ -58,7 +61,7 @@ services:
     volumes:
       - mongo_order_data:/data/db
     ports:
-      - "27019:27017" 
+      - "27019:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: sa
       MONGO_INITDB_ROOT_PASSWORD: Abc12345
@@ -113,8 +116,12 @@ services:
     build: ./api-gateway
     ports:
       - "3003:3003"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     environment:
-      RABBITMQ_URI: amqp://Admin:Abc12345@rabbitmq:5672
+      # Unificar vhost como en los otros servicios
+      RABBITMQ_URI: amqp://Admin:Abc12345@rabbitmq:5672/%2F
     networks:
       - ecommerce
 
@@ -127,4 +134,4 @@ volumes:
 
 networks:
   ecommerce:
-   driver: bridge
+    driver: bridge

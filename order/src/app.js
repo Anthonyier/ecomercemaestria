@@ -1,14 +1,12 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const Order = require("./models/order");
-const amqp = require("amqplib");
 const config = require("./config");
+const broker = require("./utils/messageBroker"); // <- usa el broker con reintentos
 
 class App {
   constructor() {
     this.app = express();
-    this.connectDB();
-    this.setupOrderConsumer();
   }
 
   async connectDB() {
@@ -24,52 +22,41 @@ class App {
     console.log("MongoDB disconnected");
   }
 
-  async setupOrderConsumer() {
-    console.log("Connecting to RabbitMQ...");
-  
-    setTimeout(async () => {
-      try {
-        const amqpServer = "amqp://rabbitmq:5672";
-        const connection = await amqp.connect(amqpServer);
-        console.log("Connected to RabbitMQ");
-        const channel = await connection.createChannel();
-        await channel.assertQueue("orders");
-  
-        channel.consume("orders", async (data) => {
-          // Consume messages from the order queue on buy
-          console.log("Consuming ORDER service");
-          const { products, username, orderId } = JSON.parse(data.content);
-  
-          const newOrder = new Order({
-            products,
-            user: username,
-            totalPrice: products.reduce((acc, product) => acc + product.price, 0),
-          });
-  
-          // Save order to DB
-          await newOrder.save();
-  
-          // Send ACK to ORDER service
-          channel.ack(data);
-          console.log("Order saved to DB and ACK sent to ORDER queue");
-  
-          // Send fulfilled order to PRODUCTS service
-          // Include orderId in the message
-          const { user, products: savedProducts, totalPrice } = newOrder.toJSON();
-          channel.sendToQueue(
-            "products",
-            Buffer.from(JSON.stringify({ orderId, user, products: savedProducts, totalPrice }))
-          );
-        });
-      } catch (err) {
-        console.error("Failed to connect to RabbitMQ:", err.message);
-      }
-    }, 10000); // add a delay to wait for RabbitMQ to start in docker-compose
-  }
+  async start() {
+    // 1) DB
+    await this.connectDB();
 
+    // 2) RabbitMQ con reintentos (ya no usamos setTimeout)
+    await broker.connect();
 
+    // 3) Consumer de la cola "orders"
+    await broker.consumeMessage("orders", async (data) => {
+      console.log("Consuming ORDER service");
 
-  start() {
+      // data puede venir como objeto (nuestro broker ya hace JSON.parse seguro)
+      const { products, username, orderId } = data;
+
+      const newOrder = new Order({
+        products,
+        user: username,
+        totalPrice: products.reduce((acc, p) => acc + p.price, 0),
+      });
+
+      await newOrder.save();
+
+      // Publica en "products" el pedido cumplido (usa el broker)
+      const { user, products: savedProducts, totalPrice } = newOrder.toJSON();
+      await broker.publishMessage("products", {
+        orderId,
+        user,
+        products: savedProducts,
+        totalPrice,
+      });
+
+      console.log("Order saved to DB and published to PRODUCTS queue");
+    });
+
+    // 4) Server HTTP
     this.server = this.app.listen(config.port, () =>
       console.log(`Server started on port ${config.port}`)
     );
@@ -77,7 +64,7 @@ class App {
 
   async stop() {
     await mongoose.disconnect();
-    this.server.close();
+    if (this.server) this.server.close();
     console.log("Server stopped");
   }
 }
