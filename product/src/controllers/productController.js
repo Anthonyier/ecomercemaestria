@@ -43,19 +43,19 @@ class ProductController {
         //return res.status(401).json({ message: "Unauthorized" });
       //}
   
-      const { ids } = req.body;
+      const { ids, username = "guest" } = req.body;
       const products = await Product.find({ _id: { $in: ids } });
   
       const orderId = uuid.v4(); // Generate a unique order ID
       this.ordersMap.set(orderId, { 
         status: "pending", 
         products, 
-        username: req.user.username
+        username
       });
   
       await messageBroker.publishMessage("orders", {
         products,
-        username: req.user.username,
+        username,
         orderId, // include the order ID in the message to orders queue
       });
 

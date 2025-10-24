@@ -2,11 +2,27 @@ const express = require("express");
 const mongoose = require("mongoose");
 const Order = require("./models/order");
 const config = require("./config");
-const broker = require("./utils/messageBroker"); // <- usa el broker con reintentos
+const broker = require("./utils/messageBroker");
 
 class App {
   constructor() {
     this.app = express();
+    this.setRoutes(); // 
+  }
+
+  setRoutes() {
+    this.app.use(express.json());
+
+    this.app.get("/health", (_req, res) => res.json({ ok: true }));
+
+    this.app.get("/orders", async (_req, res) => {
+      try {
+        const orders = await Order.find().sort({ createdAt: -1 }).limit(50);
+        res.json(orders);
+      } catch (err) {
+        res.status(500).json({ message: "Error fetching orders" });
+      }
+    });
   }
 
   async connectDB() {
@@ -23,17 +39,11 @@ class App {
   }
 
   async start() {
-    // 1) DB
     await this.connectDB();
-
-    // 2) RabbitMQ con reintentos (ya no usamos setTimeout)
     await broker.connect();
 
-    // 3) Consumer de la cola "orders"
     await broker.consumeMessage("orders", async (data) => {
       console.log("Consuming ORDER service");
-
-      // data puede venir como objeto (nuestro broker ya hace JSON.parse seguro)
       const { products, username, orderId } = data;
 
       const newOrder = new Order({
@@ -44,7 +54,6 @@ class App {
 
       await newOrder.save();
 
-      // Publica en "products" el pedido cumplido (usa el broker)
       const { user, products: savedProducts, totalPrice } = newOrder.toJSON();
       await broker.publishMessage("products", {
         orderId,
@@ -56,7 +65,6 @@ class App {
       console.log("Order saved to DB and published to PRODUCTS queue");
     });
 
-    // 4) Server HTTP
     this.server = this.app.listen(config.port, () =>
       console.log(`Server started on port ${config.port}`)
     );

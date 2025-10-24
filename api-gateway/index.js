@@ -22,7 +22,7 @@ app.use("/api/products", (req, res) => {
 
 // --- ORDER SERVICE ---
 app.use("/api/orders", (req, res) => {
-  // Redirige la URL tal cual (ya que order usa /api/orders)
+  req.url = req.originalUrl.replace(/^\/api\/orders/, "/orders");
   proxy.web(req, res, { target: "http://order:3002" });
 });
 
